@@ -17,6 +17,7 @@ Inspiration, some base GUI logic, and PolyCode Theme: PolyCode team (http://www.
 
 JSON Specs Reference
 --------------------
+```
 [
 	"LayoutName": [
 		"ElementName": {
@@ -38,34 +39,35 @@ JSON Specs Reference
 		}
 	]
 ]
+```
 
 Available Controls and Properties
 ---------------------------------
-	- Window
-		- Closed (True/false)
-	- Frame
-	- Button
-		- Caption (String)
-		- FontSize (Number)
-	- Checkbox
-		- Checked (True/False)
-	- Sprite
-		- Path (String)
-		- CropTiled (String in the format of "Width, Height, FrameIDX, FrameIDY" for evenly splitting an image)
-	- Text
-		- ExpandHeight (True/False, whether the height will be resized if too small for all text)
-		- FontSize (Number)
-		- Text (String)
-		- Alignment (String, combination of "Left", "Right", "Center", "VCenter" separated by |'s, e.g. "Center|VCenter")
-	- Group
-	- Textbox
-		- Text (String)
-		- FontSize (Number)
-	- List (Requires ScrollableFrame parent)
-		- Elements (String, names separated by |'s, e.g. "Milk|Cookies")
-		- FontSize (Number)
-	- ScrollableFrame
-	- HScroll
-	- VScroll
-	- Dropdown
-		- Elements (String, names separated by |'s, e.g. "Milk|Cookies")
+- Window
+	- Closed (True/false)
+- Frame
+- Button
+	- Caption (String)
+	- FontSize (Number)
+- Checkbox
+	- Checked (True/False)
+- Sprite
+	- Path (String)
+	- CropTiled (String in the format of "Width, Height, FrameIDX, FrameIDY" for evenly splitting an image)
+- Text
+	- ExpandHeight (True/False, whether the height will be resized if too small for all text)
+	- FontSize (Number)
+	- Text (String)
+	- Alignment (String, combination of "Left", "Right", "Center", "VCenter" separated by |'s, e.g. "Center|VCenter")
+- Group
+- Textbox
+	- Text (String)
+	- FontSize (Number)
+- List (Requires ScrollableFrame parent)
+	- Elements (String, names separated by |'s, e.g. "Milk|Cookies")
+	- FontSize (Number)
+- ScrollableFrame
+- HScroll
+- VScroll
+- Dropdown
+	- Elements (String, names separated by |'s, e.g. "Milk|Cookies")
