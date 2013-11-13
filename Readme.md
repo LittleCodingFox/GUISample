@@ -17,7 +17,7 @@ Inspiration, some base GUI logic, and PolyCode Theme: PolyCode team (http://www.
 
 JSON Specs Reference
 --------------------
-```JSON
+```
 [
 	"LayoutName": [
 		"ElementName": {
@@ -28,7 +28,7 @@ JSON Specs Reference
 			"Tall": "Height of the element (May be Percentage or specific number)",
 			"Enabled": Optional, Whether the user may interact with this (true or false, not as a string),
 			"MouseInputEnabled": Optional, Whether the user may interact with this with a mouse (true or false, not as a string),
-			"KeyboardInputEnabled: Optional, Whether the user may interact with this with a keyboard (true or false, not as a string),
+			"KeyboardInputEnabled": Optional, Whether the user may interact with this with a keyboard (true or false, not as a string),
 			"Visible": Optional, Whether this is visible (true or false, not as a string),
 			"Opacity": Optional, Opacity of this element (0 to 1, not as a string),
 			"Tooltip": Optional, Tooltip text,
@@ -76,7 +76,7 @@ Example JSON
 ------------
 ```JSON
 [
-	"Novel" : [
+	"Novel": [
 		"DialogPanel": {
 			"Control": "Frame",
 			"Xpos": "20",
@@ -104,7 +104,7 @@ Example JSON
 				}
 			]
 		},
-		"NamePanel" : {
+		"NamePanel": {
 			"Control": "Frame",
 			"Xpos": "20",
 			"Ypos": "380",
@@ -123,7 +123,7 @@ Example JSON
 				}
 			]
 		},
-		"QuestionPanel" : {
+		"QuestionPanel": {
 			"Control": "Frame",
 			"Xpos": "center",
 			"Ypos": "12%",
@@ -141,7 +141,7 @@ Example JSON
 					"Text": "?",
 					"ExpandHeight": false
 				},
-				"DialogQuestionAnswer1Text" : {
+				"DialogQuestionAnswer1Text": {
 					"Control": "Button",
 					"Xpos": "center",
 					"Ypos": "80",
@@ -151,7 +151,7 @@ Example JSON
 					"Caption": "Eat cabbages",
 					"ExpandHeight": false
 				},
-				"DialogQuestionAnswer2Text" : {
+				"DialogQuestionAnswer2Text": {
 					"Control": "Button",
 					"Xpos": "center",
 					"Ypos": "150",
@@ -161,7 +161,7 @@ Example JSON
 					"Caption": "Find all the licorice",
 					"ExpandHeight": false
 				},
-				"DialogQuestionAnswer3Text" : {
+				"DialogQuestionAnswer3Text": {
 					"Control": "Button",
 					"Xpos": "center",
 					"Ypos": "220",
