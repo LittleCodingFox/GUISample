@@ -69,8 +69,6 @@ Available Controls and Properties
 - ScrollableFrame
 - HScroll
 - VScroll
-- Dropdown
-	- Elements (String, names separated by |'s, e.g. "Milk|Cookies")
 	
 Example JSON
 ------------
