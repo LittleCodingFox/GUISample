@@ -17,7 +17,7 @@ Inspiration, some base GUI logic, and PolyCode Theme: PolyCode team (http://www.
 
 JSON Specs Reference
 --------------------
-```
+```JSON
 [
 	"LayoutName": [
 		"ElementName": {
@@ -74,7 +74,7 @@ Available Controls and Properties
 	
 Example JSON
 ------------
-```
+```JSON
 [
 	"Novel" : [
 		"DialogPanel": {
