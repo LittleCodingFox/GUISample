@@ -1,4 +1,5 @@
 #include <map>
+#include <string>
 #include "StringID.hpp"
 #include "CRC32.hpp"
 

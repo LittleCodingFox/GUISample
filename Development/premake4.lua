@@ -18,11 +18,25 @@ solution "GUISandbox"
 		defines({ "UNICODE", "GLEW_STATIC" })
 		
 		configuration "Debug"
-			links { "opengl32", "glu32", "glew", "sfml-system-d", "sfml-window-d", "sfml-graphics-d" }
+			if os.get() == "windows" then
+				links { "opengl32", "glu32", "glew", "sfml-system-d", "sfml-window-d", "sfml-graphics-d" }
+			end
+
+			if os.get() == "linux" then
+				links { "GL", "GLU", "GLEW", "sfml-system", "sfml-window", "sfml-graphics" }
+			end
+
 			flags { "Symbols" }
 		
 		configuration "Release"
-			links { "opengl32", "glu32", "glew", "sfml-system", "sfml-window", "sfml-graphics" }
+			if os.get() == "windows" then
+				links { "opengl32", "glu32", "glew", "sfml-system", "sfml-window", "sfml-graphics" }
+			end
+
+			if os.get() == "linux" then
+				links { "GL", "GLU", "GLEW", "sfml-system", "sfml-window", "sfml-graphics" }
+			end
+
 			flags { "Optimize" }
 
 

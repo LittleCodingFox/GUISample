@@ -2,6 +2,8 @@
 #include <SFML/Graphics.hpp>
 #include <json/json.h>
 #include <sstream>
+#include <math.h>
+#include <stdio.h>
 #include "SuperSmartPointer.hpp"
 #include "StringID.hpp"
 #include "GenericConfig.hpp"

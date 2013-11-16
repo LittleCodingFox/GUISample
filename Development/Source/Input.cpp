@@ -3,6 +3,7 @@
 #include <GL/glew.h>
 #include <SFML/Graphics.hpp>
 #include <json/json.h>
+#include <math.h>
 #include "Math.hpp"
 #include "SuperSmartPointer.hpp"
 #include "StringID.hpp"

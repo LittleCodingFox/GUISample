@@ -2,6 +2,10 @@
 #include <SFML/Graphics.hpp>
 #include <json/json.h>
 #include <sstream>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <math.h>
 #include "SuperSmartPointer.hpp"
 #include "StringID.hpp"
 #include "GenericConfig.hpp"
@@ -326,7 +330,7 @@ SuperSmartPointer<UIPanel> UILayout::FindPanelByName(const std::string &Name)
 
 void UIManager::CopyElementsToLayout(SuperSmartPointer<UILayout> TheLayout, Json::Value &Elements, UIPanel *Parent, const std::string &ParentElementName)
 {
-	if(Elements.type() != Json::ValueType::arrayValue)
+	if(Elements.type() != Json::arrayValue)
 		return;
 
 	for(unsigned long i = 0; i < Elements.size(); i+=2)
@@ -2526,7 +2530,8 @@ SuperSmartPointer<UIPanel> UIManager::GetMouseOverElement()
 	{
 		while(it != Elements.end() && it->second.Get() == NULL)
 		{
-			it = Elements.erase(it);
+			Elements.erase(it);
+			it = Elements.begin();
 		};
 
 		if(it == Elements.end())
@@ -2763,7 +2768,8 @@ void UIManager::OnMouseJustPressedPriv(const InputCenter::MouseButtonInfo &o)
 
 		if(CurrentMenu.Get() && FocusedElementValue.Get() != CurrentMenu.Get())
 		{
-			RemoveMenuFuture(std::vector<unsigned char>());
+			std::vector<unsigned char> Temp;
+			RemoveMenuFuture(Temp);
 		};
 	};
 
