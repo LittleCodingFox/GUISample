@@ -18,7 +18,7 @@ void Future::Update()
 	{
 		Found = false;
 
-		for(size_t i = Futures.size() - 1; i >= 0; i--)
+		for(long i = Futures.size() - 1; i >= 0; i--)
 		{
 			if(time(NULL) - Futures[i].StartTime >= Futures[i].Length)
 			{

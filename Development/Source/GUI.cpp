@@ -238,13 +238,12 @@ std::vector<sf::String> FitTextOnRect(const sf::String &String, sf::Font *Font,
 	return Lines;
 };
 
-void RenderTextSimple(sf::RenderWindow &GameWindow, const sf::String &String, sf::Font *Font, unsigned long FontSize,
-									   const Vector4 &Color, const Vector2 &Position)
+void RenderText(sf::RenderWindow &GameWindow, const sf::String &String, sf::Font *Font, unsigned long FontSize, TextParams Params)
 {
 	if(!Font)
 		return;
 
-	Vector2 ActualPosition = Position;
+	Vector2 ActualPosition = Params.PositionValue;
 
 	GameWindow.pushGLStates();
 
@@ -258,16 +257,16 @@ void RenderTextSimple(sf::RenderWindow &GameWindow, const sf::String &String, sf
 	if(Text.getCharacterSize() != FontSize)
 		Text.setCharacterSize(FontSize);
 
-	if(Text.getString() != String)
-		Text.setString(String);
-
-	sf::Color ActualTextColor((unsigned char)(Color.x * 255),
-		(unsigned char)(Color.y * 255),
-		(unsigned char)(Color.z * 255),
-		(unsigned char)(Color.w * 255));
+	sf::Color ActualTextColor((unsigned char)(Params.TextColorValue.x * 255),
+		(unsigned char)(Params.TextColorValue.y * 255),
+		(unsigned char)(Params.TextColorValue.z * 255),
+		(unsigned char)(Params.TextColorValue.w * 255));
 
 	Text.setPosition(ActualPosition.x, ActualPosition.y);
 	Text.setColor(ActualTextColor);
+
+	if(Text.getString() != String)
+		Text.setString(String);
 
 	GameWindow.draw(Text);
 
@@ -322,6 +321,27 @@ SuperSmartPointer<UIPanel> UILayout::FindPanelByName(const std::string &Name)
 	return it->second;
 };
 
+SuperSmartPointer<UILayout> UILayout::Clone(SuperSmartPointer<UIPanel> Parent, const std::string &ParentElementName)
+{
+	SuperSmartPointer<UILayout> Out(new UILayout());
+	Out->Name = Name;
+	Out->ContainedObjects = ContainedObjects;
+	Out->Owner = Owner;
+
+	Owner->CopyElementsToLayout(Out, ContainedObjects, Parent, ParentElementName + "." +
+		Out->Name);
+
+	for(ElementMap::iterator it = Out->Elements.begin(); it != Out->Elements.end(); it++)
+	{
+		if(it->second->GetParent() == Parent.Get())
+		{
+			it->second->SetVisible(true);
+		};
+	};
+
+	return Out;
+};
+
 #define CHECKJSONVALUE(Value, type)\
 	if(!Value.isNull())\
 {\
@@ -345,7 +365,7 @@ void UIManager::CopyElementsToLayout(SuperSmartPointer<UILayout> TheLayout, Json
 		};
 
 		std::string ElementName = Value.asString();
-		std::string ElementIDName = TheLayout->Name + "." + (ParentElementName.length() ? ParentElementName + "." : "") + ElementName;
+		std::string ElementIDName = ParentElementName + "." + ElementName;
 		StringID ElementID = MakeStringID(ElementIDName);
 
 		Json::Value &Data = Elements[i + 1];
@@ -396,13 +416,13 @@ void UIManager::CopyElementsToLayout(SuperSmartPointer<UILayout> TheLayout, Json
 		{
 			Panel.Reset(new UIText(this));
 		}
-		else if(Control == "GROUP")
+		else if(Control == "GROUP" || Control == "LAYOUT")
 		{
 			Panel.Reset(new UIGroup(this));
 		}
 		else if(Control == "TEXTBOX")
 		{
-			Panel.Reset(new UITextBox(this, false));
+			Panel.Reset(new UITextBox(this));
 		}
 		else if(Control == "LIST")
 		{
@@ -419,7 +439,13 @@ void UIManager::CopyElementsToLayout(SuperSmartPointer<UILayout> TheLayout, Json
 		else if(Control == "VSCROLL")
 		{
 			Panel.Reset(new UIScrollbar(this, true));
+		}
+		else if(Control == "DROPDOWN")
+		{
+			Panel.Reset(new UIDropdown(this));
 		};
+
+		Panel->Layout = TheLayout;
 
 		if(Panel.Get() == NULL)
 		{
@@ -433,7 +459,8 @@ void UIManager::CopyElementsToLayout(SuperSmartPointer<UILayout> TheLayout, Json
 			KeyboardInputEnabledValue = Data.get("KeyboardInput", Json::Value(true)),
 			MouseInputEnabledValue = Data.get("MouseInput", Json::Value(true)),
 			AlphaValue = Data.get("Opacity", Json::Value(1.0)),
-			VisibleValue = Data.get("Visible", Json::Value(true));
+			VisibleValue = Data.get("Visible", Json::Value(true)),
+			BlockingInputValue = Data.get("BlockingInput", Json::Value(false));
 
 		if(EnabledValue.isBool())
 		{
@@ -480,9 +507,18 @@ void UIManager::CopyElementsToLayout(SuperSmartPointer<UILayout> TheLayout, Json
 			CHECKJSONVALUE(VisibleValue, bool);
 		};
 
+		if(BlockingInputValue.isBool())
+		{
+			Panel->SetBlockingInput(BlockingInputValue.asBool());
+		}
+		else
+		{
+			CHECKJSONVALUE(BlockingInputValue, bool);
+		};
+
 		float x, y, w, h;
 
-		Vector2 ParentSize = Parent ? Parent->GetSize() : Vector2(this->GetOwner()->getSize().x, this->GetOwner()->getSize().y);
+		Vector2 ParentSize = Parent ? Parent->GetSize() : Vector2((float)GetOwner()->getSize().x, (float)GetOwner()->getSize().y);
 
 		Value = Data.get("Wide", Json::Value("0"));
 		std::string Temp;
@@ -578,6 +614,17 @@ void UIManager::CopyElementsToLayout(SuperSmartPointer<UILayout> TheLayout, Json
 			{
 				CHECKJSONVALUE(Value, bool);
 			};
+
+			Value = Data.get("Caption", Json::Value(""));
+
+			if(Value.isString())
+			{
+				Panel.AsDerived<UICheckBox>()->Caption = Value.asString();
+			}
+			else
+			{
+				CHECKJSONVALUE(Value, string);
+			};
 		}
 		else if(Control == "SPRITE")
 		{
@@ -606,6 +653,11 @@ void UIManager::CopyElementsToLayout(SuperSmartPointer<UILayout> TheLayout, Json
 						TheSprite->TheSprite.SpriteTexture = SpriteTexture;
 						TheSprite->TheSprite.Options.Scale(Panel->GetSize() != Vector2() ? Panel->GetSize() /
 							Vector2(SpriteTexture->getSize().x, SpriteTexture->getSize().y) : Vector2(1, 1));
+
+						if(TheSprite->GetSize() == Vector2())
+						{
+							TheSprite->SetSize(Vector2((float)SpriteTexture->getSize().x, (float)SpriteTexture->getSize().y));
+						};
 					};
 				};
 			}
@@ -634,6 +686,27 @@ void UIManager::CopyElementsToLayout(SuperSmartPointer<UILayout> TheLayout, Json
 			else
 			{
 				CHECKJSONVALUE(Value, string);
+			};
+
+			Value = Data.get("NinePatch", Json::Value(""));
+
+			if(Value.isString())
+			{
+				std::string NinePatchString = Value.asString();
+
+				if(NinePatchString.length())
+				{
+					Rect NinePatchRect;
+
+					sscanf(NinePatchString.c_str(), "%f,%f,%f,%f", &NinePatchRect.Left, &NinePatchRect.Right, &NinePatchRect.Top,
+						&NinePatchRect.Bottom);
+
+					TheSprite->TheSprite.Options.NinePatch(true, NinePatchRect).Scale(Panel->GetSize());
+				};
+			}
+			else
+			{
+				CHECKJSONVALUE(Value, string)
 			};
 		}
 		else if(Control == "WINDOW")
@@ -719,6 +792,70 @@ void UIManager::CopyElementsToLayout(SuperSmartPointer<UILayout> TheLayout, Json
 
 			UIText *TheText = Panel.AsDerived<UIText>();
 
+			static std::stringstream str;
+			str.str("");
+			str << TheText->Params.TextColorValue.x << "," << TheText->Params.TextColorValue.y << "," << TheText->Params.TextColorValue.z << "," <<
+				TheText->Params.TextColorValue.w;
+
+			Value = Data.get("TextColor", Json::Value());
+
+			if(Value.type() == Json::stringValue)
+			{
+				if(Value.asString().length())
+				{
+					sscanf(Value.asString().c_str(), "%f,%f,%f,%f", &TheText->Params.TextColorValue.x, &TheText->Params.TextColorValue.y,
+						&TheText->Params.TextColorValue.z, &TheText->Params.TextColorValue.w);
+					TheText->Params.SecondaryTextColorValue = TheText->Params.TextColorValue;
+				};
+			}
+			else
+			{
+				CHECKJSONVALUE(Value, string);
+			};
+
+			str.str("");
+			str << TheText->Params.SecondaryTextColorValue.x << "," << TheText->Params.SecondaryTextColorValue.y << "," <<
+				TheText->Params.SecondaryTextColorValue.z << "," << TheText->Params.SecondaryTextColorValue.w;
+
+			Value = Data.get("SecondaryTextColor", Json::Value(str.str()));
+
+			if(Value.type() == Json::stringValue)
+			{
+				sscanf(Value.asString().c_str(), "%f,%f,%f,%f", &TheText->Params.SecondaryTextColorValue.x, &TheText->Params.SecondaryTextColorValue.y,
+					&TheText->Params.SecondaryTextColorValue.z, &TheText->Params.SecondaryTextColorValue.w);
+			}
+			else
+			{
+				CHECKJSONVALUE(Value, string);
+			};
+
+			Value = Data.get("Border", Json::Value("0"));
+
+			if(Value.type() == Json::stringValue)
+			{
+				sscanf(Value.asString().c_str(), "%f", &TheText->Params.BorderSizeValue);
+			}
+			else
+			{
+				CHECKJSONVALUE(Value, string);
+			};
+
+			str.str("");
+			str << TheText->Params.BorderColorValue.x << "," << TheText->Params.BorderColorValue.y << "," << TheText->Params.BorderColorValue.z << "," <<
+				TheText->Params.BorderColorValue.w;
+
+			Value = Data.get("BorderColor", Json::Value(str.str()));
+
+			if(Value.type() == Json::stringValue)
+			{
+				sscanf(Value.asString().c_str(), "%f,%f,%f,%f", &TheText->Params.BorderColorValue.x, &TheText->Params.BorderColorValue.y,
+					&TheText->Params.BorderColorValue.z, &TheText->Params.BorderColorValue.w);
+			}
+			else
+			{
+				CHECKJSONVALUE(Value, string);
+			};
+
 			TheText->TextAlignment = Alignment;
 			TheText->FontSize = FontSize;
 			TheText->SetText(Text, AutoExpand);
@@ -737,6 +874,17 @@ void UIManager::CopyElementsToLayout(SuperSmartPointer<UILayout> TheLayout, Json
 			else
 			{
 				CHECKJSONVALUE(Value, string);
+			};
+
+			Value = Data.get("Password", Json::Value(false));
+
+			if(Value.isBool())
+			{
+				TheTextBox->SetPassword(Value.asBool());
+			}
+			else
+			{
+				CHECKJSONVALUE(Value, bool);
 			};
 
 			long FontSize = TheTextBox->FontSize;
@@ -788,6 +936,98 @@ void UIManager::CopyElementsToLayout(SuperSmartPointer<UILayout> TheLayout, Json
 			};
 
 			TheList->FontSize = FontSize;
+		}
+		else if(Control == "LAYOUT")
+		{
+			Json::Value Value = Data.get("ID", Json::Value());
+			std::string LayoutIDName;
+
+			if(Value.isString())
+			{
+				LayoutIDName = Value.asString();
+			}
+			else
+			{
+				CHECKJSONVALUE(Value, string);
+			};
+
+			if(LayoutIDName.length() == 0)
+			{
+				printf("While processing Layout element '%s' of layout '%s': Invalid Layout ID", ElementName.c_str(),
+					TheLayout->Name.c_str());
+
+				return;
+			};
+
+			SuperSmartPointer<UILayout> TargetLayout;
+
+			for(LayoutMap::iterator it = Layouts.begin(); it != Layouts.end(); it++)
+			{
+				if(it->second->Name ==  LayoutIDName)
+				{
+					TargetLayout = it->second;
+
+					break;
+				};
+			};
+
+			if(TargetLayout.Get() == NULL)
+			{
+				printf("While processing Layout element '%s' of layout '%s': Layout '%s' not found (may not have been created already)",
+					ElementName.c_str(), TheLayout->Name.c_str(), LayoutIDName.c_str());
+
+				return;
+			};
+
+			SuperSmartPointer<UILayout> NewLayout = TargetLayout->Clone(Panel, ParentElementName + "." + ElementName);
+
+			StringID LayoutID = MakeStringID(ParentElementName + "." + ElementName + "." + NewLayout->Name);
+
+			LayoutMap::iterator it = Layouts.find(LayoutID);
+
+			//Should be impossible for this to happen, but still...
+			if(it != Layouts.end())
+			{
+				printf("Found duplicate layout '%s', erasing old.", (Panel->GetLayout()->Name + "_" + NewLayout->Name).c_str());
+
+				Layouts.erase(it);
+			};
+
+			Layouts[LayoutID] = NewLayout;
+		}
+		else if(Control == "DROPDOWN")
+		{
+			UIDropdown *TheDropdown = Panel.AsDerived<UIDropdown>();
+
+			Value = Data.get("Elements", Json::Value(""));
+
+			if(Value.isString())
+			{
+				std::string ElementString = Value.asString();
+
+				std::vector<std::string> Items = StringUtils::Split(ElementString, '|');
+
+				TheDropdown->Items = Items;
+			}
+			else
+			{
+				CHECKJSONVALUE(Value, string);
+			};
+
+			long FontSize = TheDropdown->GetManager()->GetDefaultFontSize();
+
+			Value = Data.get("FontSize", Json::Value((Json::Value::Int)TheDropdown->GetManager()->GetDefaultFontSize()));
+
+			if(Value.isInt())
+			{
+				FontSize = Value.asInt();
+			}
+			else
+			{
+				CHECKJSONVALUE(Value, int);
+			};
+
+			TheDropdown->FontSize = FontSize;
 		};
 
 		Panel->PerformLayout();
@@ -857,7 +1097,7 @@ void UIManager::CopyElementsToLayout(SuperSmartPointer<UILayout> TheLayout, Json
 		if(!Children.isArray())
 			continue;
 
-		CopyElementsToLayout(TheLayout, Children, Panel, (ParentElementName.length() ? (ParentElementName + ".") : "") + ElementName);
+		CopyElementsToLayout(TheLayout, Children, Panel, ParentElementName + "." + ElementName);
 	};
 };
 
@@ -880,8 +1120,9 @@ bool UIManager::LoadLayouts(const std::string &Data, SuperSmartPointer<UIPanel> 
 		SuperSmartPointer<UILayout> Layout(new UILayout());
 		Layout->Name = LayoutName;
 		Layout->Owner = this;
+		Layout->ContainedObjects = Elements;
 
-		CopyElementsToLayout(Layout, Elements, Parent, "");
+		CopyElementsToLayout(Layout, Elements, Parent, Layout->Name);
 
 		StringID LayoutID = MakeStringID((Parent.Get() ? Parent->GetLayout()->Name + "_" : "") + LayoutName);
 
@@ -913,9 +1154,12 @@ void RemoveElementFuture(std::vector<unsigned char> &Stream)
 {
 	StringID ID = 0;
 	UIManager *Manager = NULL;
+	unsigned long ManagerAddr = 0;
 
 	memcpy(&Stream[0], &ID, sizeof(StringID));
 	memcpy(&Stream[sizeof(StringID)], &Manager, sizeof(UIManager *));
+
+	Manager = (UIManager *)ManagerAddr;
 
 	Manager->RemoveElement(ID);
 };
@@ -953,6 +1197,8 @@ UIPanel::~UIPanel()
 {
 	if(ParentValue)
 		ParentValue->RemoveChild(this);
+
+	GetManager()->RemoveElement(ID);
 
 	Clear();
 };
@@ -1075,14 +1321,14 @@ void UIButton::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
 	//Not /2'ing the Y axis because it works better this way for some reason
 	Vector2 Offset = Vector2((SizeValue.x - ActualSize.x) / 2 + LabelOffset.x, LabelOffset.y);
 
-	RenderTextSimple(*Renderer, Caption, Manager->GetDefaultFont(), FontSize,
-		FontColor, ActualPosition + Offset);
+	RenderText(*Renderer, Caption, Manager->GetDefaultFont(), FontSize,
+		TextParams().Color(FontColor).Position(ActualPosition + Offset));
 
 	glColor4f(1, 1, 1, 1);
 };
 
-UITextBox::UITextBox(UIManager *Manager, bool _MultiLine) : UIPanel(Manager), FontSize(12), CursorPosition(0),
-	TextOffset(0), MultiLine(_MultiLine)
+UITextBox::UITextBox(UIManager *Manager) : UIPanel(Manager), FontSize(12), CursorPosition(0),
+	TextOffset(0)
 {
 	OnMouseJustPressed.Connect(this, &UITextBox::OnMouseJustPressedTextBox);
 	OnKeyJustPressed.Connect(this, &UITextBox::OnKeyJustPressedTextBox);
@@ -1099,6 +1345,16 @@ void UITextBox::OnMouseJustPressedTextBox(UIPanel *This, const InputCenter::Mous
 
 		std::wstring WideString = Text.toWideString();
 
+		if(IsPasswordValue)
+		{
+			std::wstringstream str;
+
+			for(unsigned long i = 0; i < WideString.size(); i++)
+				str << "*";
+
+			WideString = str.str();
+		};
+
 		unsigned long X = 0;
 
 		Rect TextSize = MeasureTextSimple(WideString.substr(TextOffset), Manager->GetDefaultFont(), FontSize);
@@ -1108,7 +1364,7 @@ void UITextBox::OnMouseJustPressedTextBox(UIPanel *This, const InputCenter::Mous
 			Vector2 Size = MeasureTextSimple(WideString.substr(TextOffset, i + 1),
 				Manager->GetDefaultFont(), FontSize).ToFullSize();
 
-			if(ActualPosition.x + Size.x + TextSize.Left > GetManager()->GetInput()->MousePosition.x)
+			if(ActualPosition.x + Size.x + TextSize.Left > Manager->GetInput()->MousePosition.x)
 				break;
 
 			X++;
@@ -1166,7 +1422,7 @@ void UITextBox::OnCharacterEnteredTextBox(UIPanel *This)
 	{
 		std::wstring ActualText = Text.toWideString();
 
-		if(GetManager()->GetInput()->Character == 8) //Hardcoded Backspace
+		if(Manager->GetInput()->Character == 8) //Hardcoded Backspace
 		{
 			if(ActualText.length() == 0)
 				return;
@@ -1184,7 +1440,7 @@ void UITextBox::OnCharacterEnteredTextBox(UIPanel *This)
 		}
 		else
 		{
-			ActualText = ActualText.substr(0, TextOffset + CursorPosition) + GetManager()->GetInput()->Character +
+			ActualText = ActualText.substr(0, TextOffset + CursorPosition) + Manager->GetInput()->Character +
 				ActualText.substr(TextOffset + CursorPosition);
 
 			CursorPosition++;
@@ -1251,7 +1507,6 @@ void UITextBox::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
 		ActualPosition.y + SizeValue.y < 0 || ActualPosition.y > Renderer->getSize().y))
 		return;
 
-
 	Sprite TheSprite;
 	TheSprite.SpriteTexture = BackgroundTexture;
 	TheSprite.Options.Position(ActualPosition).NinePatch(true, TextureRect).Scale(ActualSize);
@@ -1259,6 +1514,16 @@ void UITextBox::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
 	TheSprite.Draw(Renderer);
 
 	std::wstring WideString = Text.toWideString();
+
+	if(IsPasswordValue)
+	{
+		std::wstringstream str;
+
+		for(unsigned long i = 0; i < WideString.size(); i++)
+			str << "*";
+
+		WideString = str.str();
+	};
 
 	Rect TextSize = MeasureTextSimple(WideString.substr(TextOffset), Manager->GetDefaultFont(), FontSize);
 
@@ -1280,8 +1545,8 @@ void UITextBox::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
 		};
 	};
 
-	RenderTextSimple(*Renderer, WideString.substr(TextOffset, Count),
-		Manager->GetDefaultFont(), FontSize, Vector4(0, 0, 0, 1), ActualPosition + Offset);
+	RenderText(*Renderer, WideString.substr(TextOffset, Count),
+		Manager->GetDefaultFont(), FontSize, TextParams().Color(Vector4(0, 0, 0, 1)).Position(ActualPosition + Offset));
 
 	if(this == Manager->GetFocusedElement())
 	{
@@ -1321,34 +1586,37 @@ void UITextBox::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
 		glLineWidth(1);
 	};
 
-	glDisableClientState(GL_VERTEX_ARRAY);
-
 	glColor4f(1, 1, 1, 1);
 };
 
 void UIScrollableFrame::OnSkinChange()
 {
-	VerticalScroll->SetSkin(Skin);
-	HorizontalScroll->SetSkin(Skin);
 };
 
 void UIScrollableFrame::MakeScrolls()
 {
 	VerticalScroll.Dispose();
 	HorizontalScroll.Dispose();
+
 	VerticalScroll.Reset(new UIScrollbar(GetManager(), true));
 	HorizontalScroll.Reset(new UIScrollbar(GetManager(), false));
 
 	GetManager()->AddElement(MakeStringID(StringUtils::MakeIntString((unsigned long)this, true) + "_VERTICALSCROLL"), VerticalScroll);
-
 	GetManager()->AddElement(MakeStringID(StringUtils::MakeIntString((unsigned long)this, true) + "_HORIZONTALSCROLL"), HorizontalScroll);
-
-	AddChildren(VerticalScroll);
-	AddChildren(HorizontalScroll);
 };
 
 void UIScrollableFrame::Update(const Vector2 &ParentPosition)
 {
+	if(VerticalScroll.Get() == NULL || HorizontalScroll.Get() == NULL)
+		MakeScrolls();
+
+	if((VerticalScroll->GetParent() == NULL || HorizontalScroll->GetParent() == NULL) &&
+		GetManager()->GetElement(ID) != SuperSmartPointer<UIPanel>())
+	{
+		AddChildren(VerticalScroll);
+		AddChildren(HorizontalScroll);
+	};
+
 	Vector2 ActualPosition = ParentPosition + PositionValue;
 
 	Vector2 ChildrenSize = GetChildrenSize();
@@ -1379,6 +1647,36 @@ void UIScrollableFrame::Update(const Vector2 &ParentPosition)
 		HorizontalScroll->SetSize(HorizontalScroll->GetSize() - Vector2(VerticalScroll->GetExtraSize().x + VerticalScroll->GetSize().x, 0));
 	};
 
+	if(VerticalScroll->IsVisible() && GetManager()->GetMouseOverElement().Get() == this)
+	{
+		long Step = Manager->GetInput()->MouseWheel < 0 ? 1 : Manager->GetInput()->MouseWheel > 0 ? -1 : 0;
+		unsigned long MaxSteps = (VerticalScroll->MaxValue - VerticalScroll->MinValue) / VerticalScroll->ValueStep;
+		unsigned long StepPower = (unsigned long)(MaxSteps * 0.05f);
+
+		if(Step < 0)
+		{
+			if(VerticalScroll->CurrentStep > StepPower)
+			{
+				VerticalScroll->CurrentStep -= StepPower;
+			}
+			else if(VerticalScroll->CurrentStep > 0)
+			{
+				VerticalScroll->CurrentStep = 0;
+			};
+		}
+		else if(Step > 0)
+		{
+			if(VerticalScroll->CurrentStep + StepPower < MaxSteps)
+			{
+				VerticalScroll->CurrentStep += StepPower;
+			}
+			else if(VerticalScroll->CurrentStep < MaxSteps)
+			{
+				VerticalScroll->CurrentStep = MaxSteps;
+			};
+		};
+	};
+
 	for(unsigned long i = 0; i < Children.size(); i++)
 	{
 		Children[i]->Update(ActualPosition);
@@ -1387,6 +1685,9 @@ void UIScrollableFrame::Update(const Vector2 &ParentPosition)
 
 void UIScrollableFrame::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
 {
+	if(VerticalScroll.Get() == NULL || HorizontalScroll.Get() == NULL)
+		MakeScrolls();
+
 	Vector2 ActualPosition = ParentPosition + PositionValue;
 
 	if(!IsVisible() || AlphaValue == 0 || (ActualPosition.x + SizeValue.x < 0 ||
@@ -1430,18 +1731,32 @@ void UIScrollableFrame::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Re
 
 	Vector2 ChildrenSize = GetChildrenSize();
 
+	bool EnabledScissor = glIsEnabled(GL_SCISSOR_TEST);
 	glEnable(GL_SCISSOR_TEST);
+
+	Vector4 PreviousScissor;
+	glGetFloatv(GL_SCISSOR_BOX, (GLfloat *)&PreviousScissor);
 
 	glScissor((GLsizei)ActualPosition.x, (GLsizei)(Renderer->getSize().y - ActualPosition.y - SizeValue.y),
 		(GLsizei)(SizeValue.x - (ChildrenSize.y > SizeValue.y ? VerticalScroll->GetSize().x : 0)), (GLsizei)(SizeValue.y -
 		(ChildrenSize.x > SizeValue.x ? HorizontalScroll->GetSize().y : 0)));
 
-	for(unsigned long i = 2; i < Children.size(); i++)
+	for(unsigned long i = 0; i < Children.size(); i++)
 	{
+		if(Children[i] == VerticalScroll || Children[i] == HorizontalScroll)
+			continue;
+
 		Children[i]->Draw(ActualPosition - TranslationValue, Renderer);
 	};
 
-	glDisable(GL_SCISSOR_TEST);
+	if(!EnabledScissor)
+	{
+		glDisable(GL_SCISSOR_TEST);
+	}
+	else
+	{
+		glScissor((GLsizei)PreviousScissor.x, (GLsizei)PreviousScissor.y, (GLsizei)PreviousScissor.z, (GLsizei)PreviousScissor.w);
+	};
 
 	VerticalScroll->Draw(ActualPosition, Renderer);
 	HorizontalScroll->Draw(ActualPosition, Renderer);
@@ -1478,6 +1793,7 @@ void UIList::OnItemClickCheck(UIPanel *Self)
 	Vector2 ActualPosition = GetParentPosition() + PositionValue;
 	AxisAlignedBoundingBox AABB;
 	float Height = 0;
+	UIScrollableFrame *Parent = ParentValue.AsDerived<UIScrollableFrame>();
 
 	AABB.min = ActualPosition;
 
@@ -1488,11 +1804,11 @@ void UIList::OnItemClickCheck(UIPanel *Self)
 		float SizeY = (Size.y < FontSize * 1.15f ? FontSize * 1.15f : Size.y);
 
 		AABB.min.y = ActualPosition.y + Height;
-		AABB.max = ActualPosition + Vector2(ParentValue->GetSize().x - SCROLLBAR_DRAGGABLE_SIZE, Height + SizeY);
+		AABB.max = ActualPosition + Vector2(ParentValue->GetSize().x - (Parent->VerticalScroll->IsVisible() ? SCROLLBAR_DRAGGABLE_SIZE : 0), Height + SizeY);
 
 		Height += SizeY + 2;
 
-		if(AABB.IsInside(GetManager()->GetInput()->MousePosition))
+		if(AABB.IsInside(Manager->GetInput()->MousePosition))
 		{
 			OnItemClick(this, i);
 
@@ -1506,6 +1822,7 @@ void UIList::Update(const Vector2 &ParentPosition)
 	Vector2 ActualPosition = ParentPosition + PositionValue;
 	AxisAlignedBoundingBox AABB;
 	float Height = 0;
+	UIScrollableFrame *Parent = ParentValue.AsDerived<UIScrollableFrame>();
 
 	AABB.min = ActualPosition;
 
@@ -1516,11 +1833,11 @@ void UIList::Update(const Vector2 &ParentPosition)
 		float SizeY = (Size.y < FontSize * 1.15f ? FontSize * 1.15f : Size.y);
 
 		AABB.min.y = ActualPosition.y + Height;
-		AABB.max = ActualPosition + Vector2(ParentValue->GetSize().x - SCROLLBAR_DRAGGABLE_SIZE, Height + SizeY);
+		AABB.max = ActualPosition + Vector2(SizeValue.x, Height + SizeY);
 
 		Height += SizeY + 2;
 
-		if(AABB.IsInside(GetManager()->GetInput()->MousePosition))
+		if(AABB.IsInside(Manager->GetInput()->MousePosition))
 		{
 			OnItemMouseOver(this, i);
 
@@ -1535,6 +1852,7 @@ void UIList::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
 		return;
 
 	static AxisAlignedBoundingBox AABB;
+	UIScrollableFrame *Parent = ParentValue.AsDerived<UIScrollableFrame>();
 
 	Vector2 ActualPosition = ParentPosition + PositionValue;
 
@@ -1554,22 +1872,22 @@ void UIList::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
 		float SizeY = (Size.y < FontSize * 1.15f ? FontSize * 1.15f : Size.y);
 
 		AABB.min.y = ActualPosition.y + Height;
-		AABB.max = ActualPosition + Vector2(ParentValue->GetSize().x - SCROLLBAR_DRAGGABLE_SIZE, Height + SizeY);
+		AABB.max = ActualPosition + Vector2(SizeValue.x, Height + SizeY);
 
 		Height += SizeY + 2;
 
-		if(AABB.IsInside(GetManager()->GetInput()->MousePosition))
+		if(AABB.IsInside(Manager->GetInput()->MousePosition))
 		{
 			Sprite TheSprite;
 			TheSprite.SpriteTexture = SelectorBackgroundTexture;
-			TheSprite.Options.Position(AABB.min.ToVector2()).Scale(Vector2(ParentValue->GetSize().x - SCROLLBAR_DRAGGABLE_SIZE, AABB.max.y - AABB.min.y) /
+			TheSprite.Options.Position(AABB.min.ToVector2()).Scale(Vector2(SizeValue.x, AABB.max.y - AABB.min.y) /
 				Vector2(SelectorBackgroundTexture->getSize().x, SelectorBackgroundTexture->getSize().y));
 
 			TheSprite.Draw(Renderer);
 		};
 
-		RenderTextSimple(*Renderer, Items[i], Manager->GetDefaultFont(), FontSize,
-			GetManager()->GetDefaultFontColor(), Vector2(AABB.min.x, AABB.min.y));
+		RenderText(*Renderer, Items[i], Manager->GetDefaultFont(), FontSize,
+			TextParams().Color(GetManager()->GetDefaultFontColor()).Position(Vector2(AABB.min.x, AABB.min.y)));
 	};
 
 	glColor4f(1, 1, 1, 1);
@@ -1579,10 +1897,108 @@ void UIList::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
 	SizeValue = Vector2(Final.x, Final.y);
 };
 
+void UIDropdown::OnSkinChange()
+{
+	FontSize = GetManager()->GetDefaultFontSize();
+
+	std::string TexturePath = Skin->GetString("Dropdown", "BackgroundTexture");
+
+	BackgroundTexture = LoadTexture(TexturePath);
+
+	TexturePath = Skin->GetString("Dropdown", "DropdownTexture");
+
+	DropdownTexture = LoadTexture(TexturePath);
+
+	std::string NinePatchRectValue = Skin->GetString("Dropdown", "TextureRect");
+
+	sscanf(NinePatchRectValue.c_str(), "%f,%f,%f,%f", &TextureRect.Left, &TextureRect.Right,
+		&TextureRect.Top, &TextureRect.Bottom);
+
+	FontSize = GetManager()->GetDefaultFontSize();
+
+	std::string DropdownHeightString = Skin->GetString("Dropdown", "Height");
+
+	sscanf(DropdownHeightString.c_str(), "%f", &DropdownHeight);
+
+	std::string DropdownOffsetString = Skin->GetString("Dropdown", "Offset");
+
+	sscanf(DropdownOffsetString.c_str(), "%f,%f", &DropdownOffset.x, &DropdownOffset.y);
+
+	std::string TextOffsetString = Skin->GetString("Dropdown", "TextOffset");
+
+	sscanf(TextOffsetString.c_str(), "%f,%f", &TextOffset.x, &TextOffset.y);
+};
+
+void UIDropdown::PerformLayout()
+{
+	SizeValue.y = DropdownHeight;
+};
+
+void UIDropdown::SetSelectedItem(UIMenu::Item *Item)
+{
+	SelectedIndex = Item->Index;
+	OnItemClick(this);
+};
+
+void UIDropdown::OnItemClickCheck(UIPanel *Self)
+{
+	UIMenu *Menu = Self->GetManager()->CreateMenu(GetParentPosition() + PositionValue + Vector2(0, DropdownHeight));
+
+	for(unsigned long i = 0; i < Items.size(); i++)
+	{
+		Menu->AddItem(Items[i]);
+	};
+
+	Menu->SetSize(Vector2(SizeValue.x, Menu->GetSize().y));
+	Menu->OnItemSelected.Connect(this, &UIDropdown::SetSelectedItem);
+};
+
+void UIDropdown::Update(const Vector2 &ParentPosition)
+{
+};
+
+void UIDropdown::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
+{
+	static AxisAlignedBoundingBox AABB;
+
+	Vector2 ActualPosition = ParentPosition + PositionValue;
+
+	if(!IsVisible() || AlphaValue == 0 || (ActualPosition.x + SizeValue.x < 0 ||
+		ActualPosition.x > Renderer->getSize().x ||
+		ActualPosition.y + SizeValue.y < 0 || ActualPosition.y > Renderer->getSize().y))
+		return;
+
+	Sprite TheSprite;
+	TheSprite.SpriteTexture = BackgroundTexture;
+	TheSprite.Options.NinePatch(true, TextureRect).Position(ActualPosition).Scale(Vector2(SizeValue.x, DropdownHeight));
+
+	TheSprite.Draw(Renderer);
+
+	std::string ItemName;
+
+	if(SelectedIndex == -1 || SelectedIndex >= (long)Items.size())
+	{
+		ItemName = "(None)";
+	}
+	else
+	{
+		ItemName = Items[SelectedIndex];
+	};
+
+	RenderText(*Renderer, ItemName, GetManager()->GetDefaultFont(), FontSize, TextParams().Position(ActualPosition + TextOffset)
+		.Color(GetManager()->GetDefaultFontColor()));
+
+	TheSprite.SpriteTexture = DropdownTexture;
+	TheSprite.Options.NinePatch(false, TextureRect).Position(ActualPosition + Vector2(SizeValue.x - DropdownOffset.x - DropdownTexture->getSize().x,
+		DropdownOffset.y)).Scale(Vector2(1, 1));
+
+	TheSprite.Draw(Renderer);
+};
+
 void UIText::OnSkinChange()
 {
 	FontSize = Manager->GetDefaultFontSize();
-	FontColor = Manager->GetDefaultFontColor();
+	Params.Color(Manager->GetDefaultFontColor()).SecondaryColor(Manager->GetDefaultSecondaryFontColor());
 };
 
 void UIText::SetText(const sf::String &String, bool AutoExpandHeight)
@@ -1643,30 +2059,28 @@ void UIText::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
 	{
 		if(TextAlignment & UITextAlignment::Center)
 		{
-			RenderTextSimple(*Renderer, Strings[i], Manager->GetDefaultFont(), FontSize, FontColor,
-				ActualPosition +
-				Vector2((SizeValue.x - MeasureTextSimple(Strings[i], Manager->GetDefaultFont(),
-				FontSize).ToFullSize().x) / 2, (float)TextYOffset));
+			RenderText(*Renderer, Strings[i], Manager->GetDefaultFont(), FontSize,
+				Params.Position(ActualPosition + Vector2((SizeValue.x -
+				MeasureTextSimple(Strings[i], Manager->GetDefaultFont(),
+				FontSize).ToFullSize().x) / 2, (float)TextYOffset)));
 		}
 		else if(TextAlignment & UITextAlignment::Right)
 		{
-			RenderTextSimple(*Renderer, Strings[i], Manager->GetDefaultFont(), FontSize, FontColor,
-				ActualPosition +
-				Vector2(SizeValue.x - MeasureTextSimple(Strings[i], Manager->GetDefaultFont(),
-				FontSize).ToFullSize().x, (float)TextYOffset));
+			RenderText(*Renderer, Strings[i], Manager->GetDefaultFont(), FontSize, 
+				Params.Position(ActualPosition + Vector2(SizeValue.x -
+				MeasureTextSimple(Strings[i], Manager->GetDefaultFont(),
+				FontSize).ToFullSize().x, (float)TextYOffset)));
 		}
 		else
 		{
-			RenderTextSimple(*Renderer, Strings[i], Manager->GetDefaultFont(), FontSize, FontColor,
-				ActualPosition + Vector2(0, (float)TextYOffset));
+			RenderText(*Renderer, Strings[i], Manager->GetDefaultFont(), FontSize,
+				Params.Position(ActualPosition + Vector2(0, (float)TextYOffset)));
 		};
 	};
 };
 
 void UISprite::PerformLayout()
 {
-	SizeValue = TheSprite.SpriteTexture ? Vector2(TheSprite.SpriteTexture->getSize().x, TheSprite.SpriteTexture->getSize().y) *
-		TheSprite.Options.ScaleValue : Vector2();
 };
 
 void UISprite::Update(const Vector2 &ParentPosition)
@@ -1736,7 +2150,7 @@ void UIScrollbar::PerformLayout()
 
 void UIScrollbar::Update(const Vector2 &ParentPosition)
 {
-	if(this == Manager->GetFocusedElement().Get() && GetManager()->GetInput()->MouseButtons[sf::Mouse::Left].Pressed)
+	if(this == Manager->GetFocusedElement().Get() && Manager->GetInput()->MouseButtons[sf::Mouse::Left].Pressed)
 	{
 		Vector2 ActualPosition = ParentPosition + PositionValue;
 
@@ -1755,7 +2169,7 @@ void UIScrollbar::Update(const Vector2 &ParentPosition)
 				Vector2(StepOffset + Padding - SelectBoxExtraSize.x / 2 + (float)MinSize,
 				SizeValue.y - Padding * 2 + BackgroundTextureRect.Top + BackgroundTextureRect.Bottom)) + SelectBoxExtraSize / 2;
 
-			if(AABB.IsInside(GetManager()->GetInput()->MousePosition))
+			if(AABB.IsInside(Manager->GetInput()->MousePosition))
 			{
 				bool NeedsChange = CurrentStep != i;
 
@@ -1813,7 +2227,7 @@ void UITooltip::Update(const Vector2 &ParentPosition)
 
 void UITooltip::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
 {
-	SuperSmartPointer<UIPanel> MouseOverElement = GetManager()->GetMouseOverElement();
+	SuperSmartPointer<UIPanel> MouseOverElement = Manager->GetMouseOverElement();
 
 	if((Source.Get() == NULL || MouseOverElement != Source) && OverrideText.getSize() == 0)
 		return;
@@ -1860,11 +2274,8 @@ void UITooltip::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
 
 	glColor4f(1, 1, 1, 1);
 
-	if(!ParentValue)
-		glDisableClientState(GL_VERTEX_ARRAY);
-
-	RenderTextSimple(*Renderer, Text, Manager->GetDefaultFont(), FontSize,
-		Vector4(0, 0, 0, 1), ActualPosition + (SizeValue - ActualFontSize) / 2);
+	RenderText(*Renderer, Text, Manager->GetDefaultFont(), FontSize,
+		TextParams().Color(Vector4(0, 0, 0, 1)).Position(ActualPosition + (SizeValue - ActualFontSize) / 2));
 };
 
 void UIWindow::CheckClosePressed(UIPanel *This)
@@ -1878,7 +2289,7 @@ void UIWindow::CheckClosePressed(UIPanel *This)
 		CloseButtonPosition.y);
 	AABB.max = AABB.min + Vector2(CloseButtonTexture->getSize().x, CloseButtonTexture->getSize().y);
 
-	if(AABB.IsInside(GetManager()->GetInput()->MousePosition))
+	if(AABB.IsInside(Manager->GetInput()->MousePosition))
 	{
 		Closed = true;
 		SetVisible(false);
@@ -1946,11 +2357,11 @@ void UIWindow::Update(const Vector2 &ParentPosition)
 
 	Vector2 ActualPosition = ParentPosition + PositionValue;
 
-	if(!GetManager()->GetInput()->MouseButtons[sf::Mouse::Left].Pressed)
+	if(!Manager->GetInput()->MouseButtons[sf::Mouse::Left].Pressed)
 	{
 		Dragging = false;
 	}
-	else if(GetManager()->GetInput()->MouseButtons[sf::Mouse::Left].JustPressed &&
+	else if(Manager->GetInput()->MouseButtons[sf::Mouse::Left].JustPressed &&
 		Manager->GetFocusedElement().Get() == this)
 	{
 		Vector2 ActualSize = SizeValue + Vector2((float)Padding * 2, TextureRect.Top);
@@ -1959,15 +2370,15 @@ void UIWindow::Update(const Vector2 &ParentPosition)
 		AABB.min = ActualPosition + Vector2(0, (float)TitleOffset);
 		AABB.max = AABB.min + Vector2(ActualSize.x, (float)TitleHeight);
 
-		if(AABB.IsInside(GetManager()->GetInput()->MousePosition))
+		if(AABB.IsInside(Manager->GetInput()->MousePosition))
 		{
 			Dragging = true;
-			LastMousePosition = GetManager()->GetInput()->MousePosition;
+			LastMousePosition = Manager->GetInput()->MousePosition;
 		};
 	}
 	else if(Dragging)
 	{
-		Vector2 Difference = GetManager()->GetInput()->MousePosition - LastMousePosition;
+		Vector2 Difference = Manager->GetInput()->MousePosition - LastMousePosition;
 
 		ActualPosition += Difference;
 		PositionValue += Difference;
@@ -1984,7 +2395,7 @@ void UIWindow::Update(const Vector2 &ParentPosition)
 			PositionValue.x = ActualPosition.x = -X;
 		};
 
-		LastMousePosition = GetManager()->GetInput()->MousePosition;
+		LastMousePosition = Manager->GetInput()->MousePosition;
 	};
 
 	for(unsigned long i = 0; i < Children.size(); i++)
@@ -2009,13 +2420,13 @@ void UIWindow::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
 
 	TheSprite.Draw(Renderer);
 
-	RenderTextSimple(*Renderer, Title, Manager->GetDefaultFont(), TitleFontSize,
-		TitleFontColor, Vector2(ActualPosition + TitlePosition - Vector2((float)Padding, 0)));
+	RenderText(*Renderer, Title, Manager->GetDefaultFont(), TitleFontSize,
+		TextParams().Color(TitleFontColor).Position(Vector2(ActualPosition + TitlePosition - Vector2((float)Padding, 0))));
 
 	Sprite CloseButtonSprite;
 	CloseButtonSprite.SpriteTexture = CloseButtonTexture;
-	CloseButtonSprite.Options.Position(ActualPosition - Vector2((float)Padding, 0) + Vector2(ActualSize.x - CloseButtonTexture->getSize().x -
-		CloseButtonPosition.x, CloseButtonPosition.y));
+	CloseButtonSprite.Options.Position(ActualPosition - Vector2((float)Padding, 0) + Vector2(ActualSize.x - CloseButtonTexture->getSize().x - CloseButtonPosition.x,
+		CloseButtonPosition.y));
 	CloseButtonSprite.Draw(Renderer);
 
 	for(unsigned long i = 0; i < Children.size(); i++)
@@ -2083,8 +2494,8 @@ void UICheckBox::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
 	TheSprite.Options = SpriteDrawOptions().Position(ActualPosition);
 	TheSprite.Draw(Renderer);
 
-	RenderTextSimple(*Renderer, Caption, Manager->GetDefaultFont(), FontSize, FontColor, ActualPosition +
-		Vector2((float)TheSprite.SpriteTexture->getSize().x, 0) + LabelOffset);
+	RenderText(*Renderer, Caption, Manager->GetDefaultFont(), FontSize, TextParams().Color(FontColor).Position(ActualPosition +
+		Vector2((float)TheSprite.SpriteTexture->getSize().x, 0) + LabelOffset));
 };
 
 void UIMenu::OnSkinChange()
@@ -2146,7 +2557,7 @@ void UIMenu::OnItemClick(UIPanel *Self)
 {
 	Vector2 ActualPosition = PositionValue + GetParentPosition();
 
-	const Vector2 &MousePosition = GetManager()->GetInput()->MousePosition;
+	const Vector2 &MousePosition = Manager->GetInput()->MousePosition;
 
 	AxisAlignedBoundingBox AABB;
 
@@ -2187,7 +2598,7 @@ void UIMenu::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
 
 	TheSprite.Draw(Renderer);
 
-	const Vector2 &MousePosition = GetManager()->GetInput()->MousePosition;
+	const Vector2 &MousePosition = Manager->GetInput()->MousePosition;
 
 	AxisAlignedBoundingBox AABB;
 	bool DrewSelector = false;
@@ -2209,8 +2620,8 @@ void UIMenu::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
 
 		Vector2 TextSize = MeasureTextSimple(Items[i].Caption, Manager->GetDefaultFont(), FontSize).ToFullSize();
 
-		RenderTextSimple(*Renderer, Items[i].Caption, Manager->GetDefaultFont(), FontSize, FontColor,
-			AABB.min.ToVector2() + Vector2(0, (ItemHeight - TextSize.y) / 2.f));
+		RenderText(*Renderer, Items[i].Caption, Manager->GetDefaultFont(), FontSize, TextParams().Color(FontColor)
+			.Position(AABB.min.ToVector2() + Vector2(0, (ItemHeight - TextSize.y) / 2.f)));
 	};
 };
 
@@ -2254,7 +2665,7 @@ void UIMenuBar::OnItemClick(UIPanel *Self)
 	Vector2 CurrentPosition;
 	AxisAlignedBoundingBox AABB;
 	bool DrewSelector = false;
-	const Vector2 &MousePosition = GetManager()->GetInput()->MousePosition;
+	const Vector2 &MousePosition = Manager->GetInput()->MousePosition;
 
 	for(unsigned long i = 0; i < Items.size(); i++)
 	{
@@ -2324,7 +2735,7 @@ void UIMenuBar::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
 
 	AxisAlignedBoundingBox AABB;
 	bool DrewSelector = false;
-	const Vector2 &MousePosition = GetManager()->GetInput()->MousePosition;
+	const Vector2 &MousePosition = Manager->GetInput()->MousePosition;
 
 	for(unsigned long i = 0; i < Items.size(); i++)
 	{
@@ -2344,8 +2755,8 @@ void UIMenuBar::Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer)
 			TheSprite.Draw(Renderer);
 		};
 
-		RenderTextSimple(*Renderer, Items[i].Caption, Manager->GetDefaultFont(), FontSize, FontColor,
-			AABB.min.ToVector2() + Vector2(0, (22 - 12) / 2.f));
+		RenderText(*Renderer, Items[i].Caption, Manager->GetDefaultFont(), FontSize, TextParams().Color(FontColor)
+			.Position(AABB.min.ToVector2() + Vector2(0, (22 - 12) / 2.f)));
 
 		CurrentPosition.x += TextSize.x + 5;
 	};
@@ -2522,6 +2933,20 @@ void UIDraggable::OnMouseReleasedDraggable(UIPanel *This, const InputCenter::Mou
 
 SuperSmartPointer<UIPanel> UIManager::GetMouseOverElement()
 {
+	if(DrawOrderCacheDirty)
+	{
+		DrawOrderCacheDirty = false;
+		DrawOrderCache.clear();
+
+		for(ElementMap::iterator it = Elements.begin(); it != Elements.end(); it++)
+		{
+			if(it->second->Panel->GetParent() == NULL)
+			{
+				DrawOrderCache.push_back(it->second);
+			};
+		};
+	};
+
 	UIPanel *FoundElement = NULL;
 
 	SuperSmartPointer<UIPanel> InputBlocker;
@@ -2537,7 +2962,7 @@ SuperSmartPointer<UIPanel> UIManager::GetMouseOverElement()
 		if(it == Elements.end())
 			break;
 
-		if(it->second->Panel->BlockingInput)
+		if(it->second->Panel->BlockingInput && it->second->Panel->IsVisible())
 		{
 			InputBlocker = it->second->Panel;
 
@@ -2554,13 +2979,12 @@ SuperSmartPointer<UIPanel> UIManager::GetMouseOverElement()
 	{
 		for(long i = DrawOrderCounter; i >= 0; i--)
 		{
-			for(ElementMap::iterator it = Elements.begin(); it != Elements.end(); it++)
+			for(unsigned long j = 0; j < DrawOrderCache.size(); j++)
 			{
-				if(it->second->Panel.Get() == NULL || !it->second->Panel->MouseInputValue ||
-					it->second->Panel->GetParent() != NULL || it->second->DrawOrder != i)
+				if(!DrawOrderCache[j]->Panel->MouseInputValue || DrawOrderCache[j]->DrawOrder != i)
 					continue;
 
-				UIPanel *p = it->second->Panel;
+				UIPanel *p = DrawOrderCache[j]->Panel;
 
 				RecursiveFindFocusedElement(Vector2(), p, FoundElement);
 
@@ -2583,36 +3007,53 @@ SuperSmartPointer<UIPanel> UIManager::GetMouseOverElement()
 
 void UIManager::Update()
 {
-	for(ElementMap::iterator it = Elements.begin(); it != Elements.end(); it++)
+	if(DrawOrderCacheDirty)
 	{
-		if(it->second.Get() == NULL || it->second->Panel.Get() == NULL)
-		{
-			Elements.erase(it);
+		DrawOrderCacheDirty = false;
+		DrawOrderCache.clear();
 
-			return;
+		for(ElementMap::iterator it = Elements.begin(); it != Elements.end(); it++)
+		{
+			if(it->second->Panel->GetParent() == NULL)
+			{
+				DrawOrderCache.push_back(it->second);
+			};
 		};
+	};
 
-		if(it->second->Panel->GetParent() == NULL && it->second->Panel->IsVisible())
+	for(unsigned long i = 0; i < DrawOrderCache.size(); i++)
+	{
+		if(DrawOrderCache[i]->Panel.Get() == NULL)
+			continue;
+
+		if(DrawOrderCache[i]->Panel->IsVisible())
 		{
-			it->second->Panel->Update(Vector2());
+			DrawOrderCache[i]->Panel->Update(Vector2());
 		};
 	};
 };
 
 void UIManager::Draw(sf::RenderWindow *Renderer)
 {
+	if(DrawOrderCacheDirty)
+	{
+		DrawOrderCacheDirty = false;
+		DrawOrderCache.clear();
+
+		for(ElementMap::iterator it = Elements.begin(); it != Elements.end(); it++)
+		{
+			if(it->second->Panel->GetParent() == NULL)
+			{
+				DrawOrderCache.push_back(it->second);
+			};
+		};
+	};
+
 	SuperSmartPointer<UIPanel> InputBlocker;
 
 	for(ElementMap::iterator it = Elements.begin(); it != Elements.end(); it++)
 	{
-		if(it->second.Get() == NULL || it->second->Panel.Get() == NULL)
-		{
-			Elements.erase(it);
-
-			return;
-		};
-
-		if(it->second->Panel->BlockingInput)
+		if(it->second->Panel->BlockingInput && it->second->Panel->IsVisible())
 		{
 			InputBlocker = it->second->Panel;
 
@@ -2622,45 +3063,37 @@ void UIManager::Draw(sf::RenderWindow *Renderer)
 
 	for(unsigned long i = 0; i <= DrawOrderCounter; i++)
 	{
-		for(ElementMap::iterator it = Elements.begin(); it != Elements.end(); it++)
+		for(unsigned long j = 0; j < DrawOrderCache.size(); j++)
 		{
-			if(it->second.Get() == NULL || it->second->Panel.Get() == NULL)
+			if(DrawOrderCache[j]->Panel.Get() == NULL || DrawOrderCache[j]->DrawOrder != i || !DrawOrderCache[j]->Panel->IsVisible())
+				continue;
+
+			if(DrawOrderCache[j]->Panel == InputBlocker)
 			{
-				Elements.erase(it);
+				glBindTexture(GL_TEXTURE_2D, NULL);
+				glEnableClientState(GL_VERTEX_ARRAY);
+				glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+				glDisableClientState(GL_NORMAL_ARRAY);
 
-				return;
-			};
-
-			if(it->second->DrawOrder == i && it->second->Panel->GetParent() == NULL &&
-				it->second->Panel->IsVisible())
-			{
-				if(it->second->Panel == InputBlocker)
-				{
-					glBindTexture(GL_TEXTURE_2D, NULL);
-					glEnableClientState(GL_VERTEX_ARRAY);
-					glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-					glDisableClientState(GL_NORMAL_ARRAY);
-
-					Vector2 Vertices[6] = {
-						Vector2(),
-						Vector2(0, Renderer->getSize().y),
-						Vector2(Renderer->getSize().x, Renderer->getSize().y),
-						Vector2(Renderer->getSize().x, Renderer->getSize().y),
-						Vector2(Renderer->getSize().x, 0),
-						Vector2(),
-					};
-
-					glVertexPointer(2, GL_FLOAT, 0, Vertices);
-
-					glColor4f(0, 0, 0, 0.3f);
-
-					glDrawArrays(GL_TRIANGLES, 0, 6);
-
-					glColor4f(1, 1, 1, 1);
+				Vector2 Vertices[6] = {
+					Vector2(),
+					Vector2(0, Renderer->getSize().y),
+					Vector2(Renderer->getSize().x, Renderer->getSize().y),
+					Vector2(Renderer->getSize().x, Renderer->getSize().y),
+					Vector2(Renderer->getSize().x, 0),
+					Vector2(),
 				};
 
-				it->second->Panel->Draw(Vector2(), Renderer);
+				glVertexPointer(2, GL_FLOAT, 0, Vertices);
+
+				glColor4f(0, 0, 0, 0.3f);
+
+				glDrawArrays(GL_TRIANGLES, 0, 6);
+
+				glColor4f(1, 1, 1, 1);
 			};
+
+			DrawOrderCache[j]->Panel->Draw(Vector2(), Renderer);
 		};
 	};
 
@@ -2694,6 +3127,20 @@ void UIManager::RecursiveFindFocusedElement(const Vector2 &ParentPosition, UIPan
 
 void UIManager::OnMouseJustPressedPriv(const InputCenter::MouseButtonInfo &o)
 {
+	if(DrawOrderCacheDirty)
+	{
+		DrawOrderCacheDirty = false;
+		DrawOrderCache.clear();
+
+		for(ElementMap::iterator it = Elements.begin(); it != Elements.end(); it++)
+		{
+			if(it->second->Panel->GetParent() == NULL)
+			{
+				DrawOrderCache.push_back(it->second);
+			};
+		};
+	};
+
 	if(o.Name == sf::Mouse::Left)
 	{
 		SuperSmartPointer<UIPanel> PreviouslyFocusedElement = FocusedElementValue;
@@ -2704,7 +3151,7 @@ void UIManager::OnMouseJustPressedPriv(const InputCenter::MouseButtonInfo &o)
 
 		for(ElementMap::iterator it = Elements.begin(); it != Elements.end(); it++)
 		{
-			if(it->second->Panel->BlockingInput)
+			if(it->second->Panel->BlockingInput && it->second->Panel->IsVisible())
 			{
 				InputBlocker = it->second->Panel;
 
@@ -2721,13 +3168,12 @@ void UIManager::OnMouseJustPressedPriv(const InputCenter::MouseButtonInfo &o)
 		{
 			for(long i = DrawOrderCounter; i >= 0; i--)
 			{
-				for(ElementMap::iterator it = Elements.begin(); it != Elements.end(); it++)
+				for(unsigned long j = 0; j < DrawOrderCache.size(); j++)
 				{
-					if(it->second->Panel.Get() == NULL || !it->second->Panel->MouseInputValue ||
-						it->second->Panel->GetParent() != NULL || it->second->DrawOrder != i)
+					if(!DrawOrderCache[j]->Panel->MouseInputValue || DrawOrderCache[j]->DrawOrder != i)
 						continue;
 
-					UIPanel *p = it->second->Panel;
+					UIPanel *p = DrawOrderCache[j]->Panel;
 
 					RecursiveFindFocusedElement(Vector2(), p, FoundElement);
 
@@ -2776,6 +3222,7 @@ void UIManager::OnMouseJustPressedPriv(const InputCenter::MouseButtonInfo &o)
 	if(FocusedElementValue)
 	{
 		FocusedElementValue->OnMouseJustPressedPriv(o);
+		GetInput()->ConsumeInput();
 	};
 };
 
@@ -2784,6 +3231,7 @@ void UIManager::OnMousePressedPriv(const InputCenter::MouseButtonInfo &o)
 	if(FocusedElementValue)
 	{
 		FocusedElementValue->OnMousePressedPriv(o);
+		GetInput()->ConsumeInput();
 	};
 };
 
@@ -2792,6 +3240,7 @@ void UIManager::OnMouseReleasedPriv(const InputCenter::MouseButtonInfo &o)
 	if(FocusedElementValue)
 	{
 		FocusedElementValue->OnMouseReleasedPriv(o);
+		GetInput()->ConsumeInput();
 	};
 };
 
@@ -2800,6 +3249,7 @@ void UIManager::OnMouseMovePriv()
 	if(FocusedElementValue)
 	{
 		FocusedElementValue->OnMouseMovePriv();
+		GetInput()->ConsumeInput();
 	};
 
 	SuperSmartPointer<UIPanel> SelectedElement = GetMouseOverElement();
@@ -2822,6 +3272,7 @@ void UIManager::OnKeyJustPressedPriv(const InputCenter::KeyInfo &o)
 	if(FocusedElementValue)
 	{
 		FocusedElementValue->OnKeyJustPressedPriv(o);
+		GetInput()->ConsumeInput();
 	};
 };
 
@@ -2830,6 +3281,7 @@ void UIManager::OnKeyPressedPriv(const InputCenter::KeyInfo &o)
 	if(FocusedElementValue)
 	{
 		FocusedElementValue->OnKeyPressedPriv(o);
+		GetInput()->ConsumeInput();
 	};
 };
 
@@ -2838,6 +3290,7 @@ void UIManager::OnKeyReleasedPriv(const InputCenter::KeyInfo &o)
 	if(FocusedElementValue)
 	{
 		FocusedElementValue->OnKeyReleasedPriv(o);
+		GetInput()->ConsumeInput();
 	};
 };
 
@@ -2846,6 +3299,7 @@ void UIManager::OnCharacterEnteredPriv()
 	if(FocusedElementValue)
 	{
 		FocusedElementValue->OnCharacterEnteredPriv();
+		GetInput()->ConsumeInput();
 	};
 };
 
@@ -2891,6 +3345,8 @@ void UIManager::UnRegisterInput()
 
 bool UIManager::AddElement(StringID ID, SuperSmartPointer<UIPanel> Element)
 {
+	DrawOrderCacheDirty = true;
+
 	ElementMap::iterator it = Elements.find(ID);
 
 	if(it != Elements.end())
@@ -2901,6 +3357,8 @@ bool UIManager::AddElement(StringID ID, SuperSmartPointer<UIPanel> Element)
 		}
 		else
 		{
+			printf("Failed to add Element 0x%08x: Duplicate ID 0x%08x", Element.Get(), ID);
+
 			return false;
 		};
 	};
@@ -2919,22 +3377,26 @@ bool UIManager::AddElement(StringID ID, SuperSmartPointer<UIPanel> Element)
 
 void UIManager::RemoveElement(StringID ID)
 {
+	DrawOrderCacheDirty = true;
+
 	ElementMap::iterator it = Elements.find(ID);
 
 	if(it != Elements.end())
 	{
-		it->second.Dispose();
-
+		SuperSmartPointer<ElementInfo> Element = it->second;
 		Elements.erase(it);
+
+		Element.Dispose();
 	};
 };
 
 void UIManager::Clear()
 {
+	DrawOrderCacheDirty = true;
+
 	while(Elements.begin() != Elements.end())
 	{
 		Elements.begin()->second.Dispose();
-		Elements.erase(Elements.begin());
 	};
 
 	FocusedElementValue.Dispose();
@@ -2971,6 +3433,18 @@ void UIManager::SetSkin(SuperSmartPointer<GenericConfig> Skin)
 
 	sscanf(DefaultFontColorValue.c_str(), "%f,%f,%f,%f", &DefaultFontColor.x, &DefaultFontColor.y,
 		&DefaultFontColor.z, &DefaultFontColor.w);
+
+	std::string DefaultSecondaryFontColorValue = Skin->GetString("General", "DefaultSecondaryFontColor");
+
+	if(DefaultSecondaryFontColorValue.length())
+	{
+		sscanf(DefaultSecondaryFontColorValue.c_str(), "%f,%f,%f,%f", &DefaultSecondaryFontColor.x, &DefaultSecondaryFontColor.y,
+			&DefaultSecondaryFontColor.z, &DefaultSecondaryFontColor.w);
+	}
+	else
+	{
+		DefaultSecondaryFontColor = DefaultFontColor;
+	};
 
 	std::string DefaultFontSizeValue = Skin->GetString("General", "DefaultFontSize");
 

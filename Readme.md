@@ -28,7 +28,7 @@ JSON Specs Reference
 			"Tall": "Height of the element (May be Percentage or specific number)",
 			"Enabled": Optional, Whether the user may interact with this (true or false, not as a string),
 			"MouseInputEnabled": Optional, Whether the user may interact with this with a mouse (true or false, not as a string),
-			"KeyboardInputEnabled": Optional, Whether the user may interact with this with a keyboard (true or false, not as a string),
+			"KeyboardInputEnabled: Optional, Whether the user may interact with this with a keyboard (true or false, not as a string),
 			"Visible": Optional, Whether this is visible (true or false, not as a string),
 			"Opacity": Optional, Opacity of this element (0 to 1, not as a string),
 			"Tooltip": Optional, Tooltip text,
@@ -51,6 +51,7 @@ Available Controls and Properties
 	- FontSize (Number)
 - Checkbox
 	- Checked (True/False)
+	- Caption (String)
 - Sprite
 	- Path (String)
 	- CropTiled (String in the format of "Width, Height, FrameIDX, FrameIDY" for evenly splitting an image)
@@ -59,6 +60,8 @@ Available Controls and Properties
 	- FontSize (Number)
 	- Text (String)
 	- Alignment (String, combination of "Left", "Right", "Center", "VCenter" separated by |'s, e.g. "Center|VCenter")
+	- TextColor (String, "r, g, b, a", values between 0 and 1)
+	- SecondaryTextColor (String, same as TextColor)
 - Group
 - Textbox
 	- Text (String)
@@ -69,6 +72,10 @@ Available Controls and Properties
 - ScrollableFrame
 - HScroll
 - VScroll
+- Dropdown
+	- Elements (String, names separated by |'s, e.g. "Milk|Cookies")
+- Layout (Inserts a layout inside this element)
+	- ID (String, Layout Name within this layout file)
 	
 Example JSON
 ------------

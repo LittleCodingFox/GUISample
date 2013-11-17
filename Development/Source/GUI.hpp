@@ -6,6 +6,92 @@ class UILayout;
 #define FLAGVALUE(x) (1 << x)
 
 /*!
+*	Text rendering parameters
+*/
+class TextParams
+{
+public:
+	Vector4 TextColorValue, SecondaryTextColorValue, BorderColorValue;
+	Vector2 PositionValue;
+	float BorderSizeValue;
+
+	TextParams() : BorderSizeValue(0), TextColorValue(1, 1, 1, 1), SecondaryTextColorValue(1, 1, 1, 1), BorderColorValue(0, 0, 0, 1) {}
+	TextParams(const TextParams &o) : BorderSizeValue(o.BorderSizeValue), TextColorValue(o.TextColorValue), SecondaryTextColorValue(o.SecondaryTextColorValue),
+		BorderColorValue(o.BorderColorValue), PositionValue(o.PositionValue) {};
+
+	TextParams &operator=(const TextParams &o)
+	{
+		BorderSizeValue = o.BorderSizeValue;
+		TextColorValue = o.TextColorValue;
+		SecondaryTextColorValue = o.SecondaryTextColorValue;
+		BorderColorValue = o.BorderColorValue;
+		PositionValue = o.PositionValue;
+
+		return *this;
+	};
+
+	/*!
+	*	Sets the text color
+	*	\param Color the color to use
+	*	\note Changes the secondary color too to prevent issues with using this
+	*	\sa SecondaryColor
+	*/
+	TextParams &Color(const Vector4 &Color)
+	{
+		TextColorValue = SecondaryTextColorValue = Color;
+
+		return *this;
+	};
+
+	/*!
+	*	Sets the secondary text color
+	*	\param SecondaryColor the secondary color to use
+	*	\sa Color
+	*/
+	TextParams &SecondaryColor(const Vector4 &SecondaryColor)
+	{
+		SecondaryTextColorValue = SecondaryColor;
+
+		return *this;
+	};
+
+	/*!
+	*	Sets the border color for the text
+	*	\param BorderColor the border color to use (default value is 0, 0, 0, 1)
+	*	\sa BorderSize
+	*/
+	TextParams &BorderColor(const Vector4 &BorderColor)
+	{
+		BorderColorValue = BorderColor;
+
+		return *this;
+	};
+
+	/*!
+	*	Sets the border size for the text
+	*	\param BorderSize the size of the border, in pixels (default value is 0)
+	*	\sa BorderColor
+	*/
+	TextParams &BorderSize(float BorderSize)
+	{
+		BorderSizeValue = BorderSize;
+
+		return *this;
+	};
+
+	/*!
+	*	Sets the text position
+	*	\param Position the text's position
+	*/
+	TextParams &Position(const Vector2 &Position)
+	{
+		PositionValue = Position;
+
+		return *this;
+	};
+};
+
+/*!
 *	UI Panel class
 */
 class UIPanel
@@ -193,6 +279,23 @@ public:
 	const sf::String &GetTooltipText()
 	{
 		return TooltipValue;
+	};
+
+	/*
+	*	\return whether this panel is blocking input
+	*/
+	bool IsBlockingInput()
+	{
+		return BlockingInput;
+	};
+
+	/*
+	*	Sets whether this panel is blocking input
+	*	\param Value whether to block input
+	*/
+	void SetBlockingInput(bool Value)
+	{
+		BlockingInput = Value;
 	};
 
 	/*!
@@ -571,35 +674,41 @@ protected:
 	sf::String Text;
 	unsigned long CursorPosition, TextOffset, Padding;
 	std::string FontName;
-	bool MultiLine;
+	bool IsPasswordValue;
 
 	Vector2 LastSizeValue;
-
-#if USING_AWESOMIUM
-	SuperSmartPointer<AwesomiumCenter::AwesomiumView> MultiLineView;
-#endif
 
 	void OnMouseJustPressedTextBox(UIPanel *This, const InputCenter::MouseButtonInfo &o);
 	void OnKeyJustPressedTextBox(UIPanel *This, const InputCenter::KeyInfo &o);
 	void OnCharacterEnteredTextBox(UIPanel *This);
 	void OnSkinChange();
-
-	void OnMousePressedMultiline(UIPanel *This, const InputCenter::MouseButtonInfo &o);
-	void OnMouseReleasedMultiline(UIPanel *This, const InputCenter::MouseButtonInfo &o);
-	void OnKeyJustPressedMultiline(UIPanel *This, const InputCenter::KeyInfo &o);
-	void OnKeyReleasedMultiline(UIPanel *This, const InputCenter::KeyInfo &o);
-	void OnCharacterEnteredMultiline(UIPanel *This);
-	void OnMouseMovedMultiline(UIPanel *This);
 public:
 	/*!
 	*	The Text Box's Font Size
 	*/
 	unsigned long FontSize;
 
-	UITextBox(UIManager *Manager, bool _MultiLine);
+	UITextBox(UIManager *Manager);
 	void PerformLayout();
 	void Update(const Vector2 &ParentPosition);
 	void Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer);
+
+	/*!
+	*	\return whether this textbox is a password
+	*/
+	bool IsPassword()
+	{
+		return IsPasswordValue;
+	};
+
+	/*!
+	*	Sets whether this textbox is a password
+	*	\param Value whether this textbox is a password
+	*/
+	void SetPassword(bool Value)
+	{
+		IsPasswordValue = Value;
+	};
 
 	/*!
 	*	\return the Text of this Text Box
@@ -631,6 +740,7 @@ class UIScrollbar;
 */
 class UIScrollableFrame : public UIPanel
 {
+	friend class UIList;
 protected:
 	SuperSmartPointer<UIScrollbar> VerticalScroll, HorizontalScroll;
 
@@ -640,7 +750,6 @@ public:
 	UIScrollableFrame(UIManager *Manager) : UIPanel(Manager)
 	{
 		OnConstructed();
-		MakeScrolls();
 	};
 
 	void Update(const Vector2 &ParentPosition);
@@ -814,6 +923,51 @@ public:
 	*	On Item Selected Event
 	*/
 	Signal1<Item *> OnItemSelected;
+
+	void PerformLayout();
+	void Update(const Vector2 &ParentPosition);
+	void Draw(const Vector2 &ParentPosition, sf::RenderWindow *Renderer);
+};
+
+/*!
+*	UI Dropdown Element
+*/
+class UIDropdown : public UIPanel
+{
+private:
+	SuperSmartPointer<sf::Texture> BackgroundTexture, DropdownTexture;
+	Vector2 TextOffset, DropdownOffset;
+	float DropdownHeight;
+	Rect TextureRect;
+
+	void OnSkinChange();
+	void OnItemClickCheck(UIPanel *Self);
+	void SetSelectedItem(UIMenu::Item *Item);
+public:
+	/*!
+	*	Selected Index for this Dropdown
+	*/
+	long SelectedIndex;
+
+	/*!
+	*	All items contained by this Dropdown
+	*/
+	std::vector<std::string> Items;
+	/*!
+	*	The Dropdown's Font Size
+	*/
+	unsigned long FontSize;
+
+	/*!
+	*	(UIDropdown Self)
+	*/
+	Signal1<UIDropdown *> OnItemClick;
+
+	UIDropdown(UIManager *Manager) : UIPanel(Manager), FontSize(16), SelectedIndex(-1)
+	{
+		OnConstructed();
+		OnClick.Connect(this, &UIDropdown::OnItemClickCheck);
+	};
 
 	void PerformLayout();
 	void Update(const Vector2 &ParentPosition);
@@ -1087,10 +1241,13 @@ public:
 	*	Font Size
 	*/
 	unsigned long FontSize;
+
 	/*!
-	*	Font Color
+	*	Text Formatting Params
+	*	\note Only colors and border are used, Position is ignored
 	*/
-	Vector4 FontColor;
+	TextParams Params;
+
 	/*!
 	*	Text Alignment
 	*/
@@ -1227,7 +1384,11 @@ public:
 
 	std::string Name;
 
+	Json::Value ContainedObjects;
+
 	~UILayout();
+
+	SuperSmartPointer<UILayout> Clone(SuperSmartPointer<UIPanel> Parent, const std::string &ParentElementName);
 
 	SuperSmartPointer<UIPanel> FindPanelById(StringID ID);
 	SuperSmartPointer<UIPanel> FindPanelByName(const std::string &Name);
@@ -1241,6 +1402,7 @@ class UIManager
 {
 	friend class UIPanel;
 	friend class UIMenu;
+	friend class UILayout;
 private:
 
 	class ElementInfo
@@ -1267,7 +1429,7 @@ private:
 	SuperSmartPointer<UIMenu> CurrentMenu;
 	SuperSmartPointer<UIMenuBar> CurrentMenuBar;
 
-	Vector4 DefaultFontColor;
+	Vector4 DefaultFontColor, DefaultSecondaryFontColor;
 	unsigned long DefaultFontSize;
 
 	void OnMouseJustPressedPriv(const InputCenter::MouseButtonInfo &o);
@@ -1291,6 +1453,9 @@ private:
 
 	typedef std::map<StringID, SuperSmartPointer<UILayout> > LayoutMap;
 	LayoutMap Layouts;
+
+	bool DrawOrderCacheDirty;
+	std::vector<ElementInfo *> DrawOrderCache;
 
 	void CopyElementsToLayout(SuperSmartPointer<UILayout> TheLayout, Json::Value &Elements, UIPanel *Parent, const std::string &ParentElementName);
 public:
@@ -1408,6 +1573,14 @@ public:
 	const Vector4 &GetDefaultFontColor()
 	{
 		return DefaultFontColor;
+	};
+
+	/*!
+	*	\return the Default Font Color
+	*/
+	const Vector4 &GetDefaultSecondaryFontColor()
+	{
+		return DefaultSecondaryFontColor;
 	};
 
 	/*!

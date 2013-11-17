@@ -55,6 +55,8 @@ bool InputCenter::Update(sf::RenderWindow *Renderer)
 
 	while(Renderer->pollEvent(Event))
 	{
+		InputConsumedValue = false;
+
 		switch(Event.type)
 		{
 		case sf::Event::MouseLeft:
@@ -210,4 +212,14 @@ void InputCenter::CenterMouse(sf::RenderWindow *Renderer)
 	sf::Mouse::setPosition(HalfMousePosition, *Renderer);
 
 	MousePosition = Vector2((float)HalfMousePosition.x, (float)HalfMousePosition.y);
+};
+
+bool InputCenter::InputConsumed()
+{
+	return InputConsumedValue;
+};
+
+void InputCenter::ConsumeInput()
+{
+	InputConsumedValue = true;
 };

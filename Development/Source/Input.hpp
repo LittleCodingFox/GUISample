@@ -38,4 +38,17 @@ public:
 	InputCenter();
 	bool Update(sf::RenderWindow *Renderer);
 	void CenterMouse(sf::RenderWindow *Renderer);
+
+	/*!
+	*	\return Whether the current input event was consumed by something else
+	*/
+	bool InputConsumed();
+
+	/*!
+	*	Consumes input for this event
+	*/
+	void ConsumeInput();
+
+private:
+	bool InputConsumedValue;
 };

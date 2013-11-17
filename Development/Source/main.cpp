@@ -90,6 +90,7 @@ int main(int argc, char **argv)
 	while(Input.Update(&Window))
 	{
 		UI.Update();
+		Future::Instance.Update();
 
 		Window.clear(sf::Color(255, 255, 255, 255));
 
