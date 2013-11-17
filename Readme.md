@@ -181,3 +181,12 @@ Example JSON
 	]
 ]
 ```
+
+Accessing Elements on a GUILayout.resource file
+-----------------------------------------------
+
+All elements are named ```<layout name>.<parent>.<name>```. So, having a layout like the example above, to access the ```DialogQuestionAnswer3Text``` element,
+you'd do something like
+```
+Manager->GetElement(MakeStringID("Novel.QuestionPanel.DialogQuestionAnswer3Text"))
+```
