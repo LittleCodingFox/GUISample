@@ -13,6 +13,7 @@ Source licensed under the zlib/libpng license (Excluding libraries used)
 Credits
 -------
 Initial GUI implementation and code: Nuno Silva (Little Coding Fox/Anthe)
+
 Inspiration, some base GUI logic, and PolyCode Theme: PolyCode team (http://www.polycode.org)
 
 JSON Specs Reference
